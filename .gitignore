@@ -1,0 +1,53 @@
+# Training outputs and checkpoints
+outputs/
+
+# LeRobot library (local checkout, not part of this repo)
+lerobot/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# HuggingFace cache
+.cache/
+
+# Screenshots and media
+Screenshot*.png
+*.mp4
+
+# Old/experimental scripts (jar push, capsule, debug)
+eval_jar_push*.py
+eval_smolvla_jar_push*.py
+train_jar_push*.py
+train_smolvla_jar_push*.py
+record_jar_push*.py
+eval_capsule*.py
+train_capsule*.py
+record_capsule*.py
+record_flex_hands.py
+train_smolvla_cup_push.py
+update_task_strings.py
+analyze_*.py
+expand_dataset.py
+cleanup.py
+reset_dataset.py
+debug_camera.py
+test_camera*.py
+test_mjpeg.py
+view_camera.py
+teleop.py
+preextract_frames*.py
+check_smolvla.py
+plot_jar_push.py
+commands.txt
+linkedin_post.txt
+0.22.0
+
+# IDE
+.idea/
+.vscode/
+*.swp
