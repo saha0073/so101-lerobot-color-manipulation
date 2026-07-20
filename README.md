@@ -32,15 +32,15 @@ Pick up an object and place it at a target location. Object placed at a differen
 
 ```bash
 # Record episodes (leader arm teleoperation)
-python record_pick_place_07_16.py
+python pick_place/record_pick_place_07_16.py
 
 # Train
-python train_act_pick_place_07_16.py       # ~1h44m on RTX 3060
-python train_smolvla_pick_place_07_16.py   # ~2h on RTX 3060
+python pick_place/train_act_pick_place_07_16.py       # ~1h44m on RTX 3060
+python pick_place/train_smolvla_pick_place_07_16.py   # ~2h on RTX 3060
 
 # Inference
-python eval_act_pick_place_07_16.py
-python eval_smolvla_pick_place_07_16.py
+python pick_place/eval_act_pick_place_07_16.py
+python pick_place/eval_smolvla_pick_place_07_16.py
 ```
 
 ### Training Details
@@ -135,44 +135,44 @@ accelerate config  # select bf16, or copy default_config.yaml manually
 ### Data Collection
 ```bash
 # Record blue cup episodes (leader arm teleoperation)
-python record_cup_push_blue.py
+python cup_push/record_cup_push_blue.py
 
 # Record red cup episodes
-python record_cup_push_red.py
+python cup_push/record_cup_push_red.py
 
 # Upload combined dataset to HuggingFace Hub
-python upload_cup_push.py
+python cup_push/upload_cup_push.py
 
 # Split combined dataset into blue/red subsets
-python split_cup_push_dataset.py
+python cup_push/split_cup_push_dataset.py
 ```
 
 ### Training
 
 **ACT (recommended — deterministic, reliable with small datasets)**
 ```bash
-python train_act_blue.py   # ~2-3 hrs on RTX 3060
-python train_act_red.py
+python cup_push/train_act_blue.py   # ~2-3 hrs on RTX 3060
+python cup_push/train_act_red.py
 ```
 
 **SmolVLA (stochastic — needs more data for consistency)**
 ```bash
-python train_smolvla_blue.py   # best run on Colab T4
-python train_smolvla_red.py
+python cup_push/train_smolvla_blue.py   # best run on Colab T4
+python cup_push/train_smolvla_red.py
 ```
 
 ### Inference
 ```bash
 # ACT inference
-python eval_act_cup_push.py --task "Move to the blue object" --policy subhodipsaha/act_cup_push_blue --episodes 5 --episode-time 20
-python eval_act_cup_push.py --task "Move to the red object"  --policy subhodipsaha/act_cup_push_red  --episodes 5 --episode-time 20
+python cup_push/eval_act_cup_push.py --task "Move to the blue object" --policy subhodipsaha/act_cup_push_blue --episodes 5 --episode-time 20
+python cup_push/eval_act_cup_push.py --task "Move to the red object"  --policy subhodipsaha/act_cup_push_red  --episodes 5 --episode-time 20
 
 # SmolVLA inference
-python eval_smolvla_cup_push.py --policy subhodipsaha/smolvla_cup_push_blue
-python eval_smolvla_cup_push.py --policy subhodipsaha/smolvla_cup_push_red
+python cup_push/eval_smolvla_cup_push.py --policy subhodipsaha/smolvla_cup_push_blue
+python cup_push/eval_smolvla_cup_push.py --policy subhodipsaha/smolvla_cup_push_red
 
 # Benchmark SmolVLA inference speed (Hz + GPU%)
-python benchmark_smolvla.py
+python cup_push/benchmark_smolvla.py
 ```
 
 ## Training Details
