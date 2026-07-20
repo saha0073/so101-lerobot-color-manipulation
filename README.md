@@ -1,8 +1,72 @@
-# SO-101 Color-Conditioned Manipulation
+# SO-101 Manipulation with ACT and SmolVLA
+
+Imitation learning experiments on an SO-101 robot arm using ACT and SmolVLA policies. Two tasks so far:
+
+1. **Color-conditioned cup push** — arm moves toward a specific colored cup (blue or red) from varying positions
+2. **Pick and place** — arm picks up an object and places it at a target location, object at a different position every episode
+
+---
+
+## Task 2: Pick and Place
+
+Pick up an object and place it at a target location. Object placed at a different position each episode to test spatial generalization.
+
+**New vs Task 1:**
+- Wrist camera added — close-up gripper view needed for grasp timing
+- Uniform yellow backdrop — improves generalization across rooms/environments
+
+### Datasets
+
+| Dataset | Episodes | HuggingFace |
+|---------|----------|-------------|
+| Pick and place | 40 | [so101_pick_place_07_16](https://huggingface.co/datasets/subhodipsaha/so101_pick_place_07_16) |
+
+### Models
+
+| Model | Policy | HuggingFace |
+|-------|--------|-------------|
+| ACT | ACT (deterministic) | [act_pick_place_07_16](https://huggingface.co/subhodipsaha/act_pick_place_07_16) |
+| SmolVLA | SmolVLA (flow matching) | [smolvla_pick_place_07_16](https://huggingface.co/subhodipsaha/smolvla_pick_place_07_16) |
+
+### Scripts
+
+```bash
+# Record episodes (leader arm teleoperation)
+python record_pick_place_07_16.py
+
+# Train
+python train_act_pick_place_07_16.py       # ~1h44m on RTX 3060
+python train_smolvla_pick_place_07_16.py   # ~2h on RTX 3060
+
+# Inference
+python eval_act_pick_place_07_16.py
+python eval_smolvla_pick_place_07_16.py
+```
+
+### Training Details
+
+| | ACT | SmolVLA |
+|--|-----|---------|
+| Dataset | 40 episodes | 40 episodes |
+| Cameras | phone + wrist | phone + wrist |
+| Steps | 20,000 | 20,000 |
+| Batch size | 8 | 4 |
+| Mixed precision | BF16 | BF16 |
+| Final loss | ~5.0 | ~0.047 |
+| Training time | ~1h44m (RTX 3060) | ~2h (RTX 3060) |
+
+### Results
+
+ACT: smooth, stable, picks consistently from varied positions.
+SmolVLA: works but shows more jitter in the trajectory.
+
+Same pattern as Task 1 — ACT more reliable on precision tasks with small datasets.
+
+---
+
+## Task 1: Color-Conditioned Cup Push
 
 Training an SO-101 robot arm to move toward a specific colored cup using imitation learning. Two separate policies — one for a blue cup, one for a red cup — trained on 60 teleoperation demonstrations each.
-
-## Demo
 
 The arm isn't doing real-time color detection. It learned the motion from demonstrations of that specific colored cup. Swap cup positions — the arm still finds the right color.
 
@@ -12,7 +76,8 @@ The arm isn't doing real-time color detection. It learned the motion from demons
 |-----------|---------|
 | Robot arm | SO-101 follower (Feetech motors) |
 | Teleoperation | SO-101 leader arm |
-| Camera | Android phone running IP Webcam app (MJPEG over USB tethering) |
+| Camera (phone) | Android phone running IP Webcam app (MJPEG over USB tethering) |
+| Camera (wrist) | WowRobo USB camera, `/dev/video2` (added for pick-and-place) |
 | GPU | RTX 3060 6GB |
 
 **Serial ports (Ubuntu, via udev rules):**

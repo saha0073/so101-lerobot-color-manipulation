@@ -47,6 +47,9 @@ commands.txt
 linkedin_post.txt
 0.22.0
 
+# Claude Code
+CLAUDE.md
+
 # IDE
 .idea/
 .vscode/
