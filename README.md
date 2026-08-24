@@ -1,9 +1,10 @@
-# SO-101 Manipulation with ACT and SmolVLA
+# SO-101 Manipulation with ACT, SmolVLA, and Pi0.5
 
-Imitation learning experiments on an SO-101 robot arm using ACT and SmolVLA policies. Two tasks so far:
+Imitation learning experiments on an SO-101 robot arm using ACT, SmolVLA, and Pi0.5 policies. Three tasks:
 
 1. **Color-conditioned cup push** — arm moves toward a specific colored cup (blue or red) from varying positions
 2. **Pick and place** — arm picks up an object and places it at a target location, object at a different position every episode
+3. **Stack three cubes** — arm picks up three cubes one by one and stacks them into a tower, cubes placed at slightly different positions each episode
 
 ---
 
@@ -61,6 +62,74 @@ ACT: smooth, stable, picks consistently from varied positions.
 SmolVLA: works but shows more jitter in the trajectory.
 
 Same pattern as Task 1 — ACT more reliable on precision tasks with small datasets.
+
+---
+
+## Task 3: Stack Three Cubes
+
+Pick up three cubes one by one and stack them into a tower. Cubes placed at slightly different positions each episode. Significantly harder than pick-and-place — requires three sequential grasps, precise placement each time, and recovering if any cube is slightly off.
+
+Trained ACT locally and also fine-tuned Pi0.5 (4B VLA) on the same dataset using cloud GPU, with async inference over ngrok TCP tunnel.
+
+### Datasets
+
+| Dataset | Episodes | HuggingFace |
+|---------|----------|-------------|
+| Stack three cubes | 40 | [so101_stack_three_cubes_08_19](https://huggingface.co/datasets/subhodipsaha/so101_stack_three_cubes_08_19) |
+
+### Models
+
+| Model | Policy | HuggingFace |
+|-------|--------|-------------|
+| ACT | ACT | [act_stack_three_cubes_08_19](https://huggingface.co/subhodipsaha/act_stack_three_cubes_08_19) |
+| Pi0.5 v2 | Pi0.5 (action expert only) | [pi05_stack_three_cubes_08_19_v2](https://huggingface.co/subhodipsaha/pi05_stack_three_cubes_08_19_v2) |
+
+### Scripts
+
+```bash
+# Record episodes
+python stack_cubes/record_stack_three_cubes_08_19.py
+
+# Train
+python stack_cubes/train_act_stack_three_cubes_08_19.py        # ~1h45m on RTX 3060
+python stack_cubes/train_pi05_runpod_stack_three_cubes_08_19.py  # ~8h on Colab L4
+
+# Inference (ACT — local)
+python stack_cubes/eval_act_stack_three_cubes_08_19.py
+
+# Inference (Pi0.5 — async, requires policy server running on Colab/RunPod)
+python stack_cubes/eval_pi05_runpod_stack_three_cubes_08_19.py
+```
+
+### Training Details
+
+| | ACT | Pi0.5 |
+|--|-----|-------|
+| Dataset | 40 episodes | 40 episodes |
+| Cameras | phone + wrist | phone + wrist |
+| Steps | 20,000 | 5,000 |
+| Batch size | 8 | 16 |
+| Mixed precision | BF16 | BF16 |
+| Trainable params | ~90M | 693M / 4B (action expert, VLM frozen) |
+| Peak GPU memory | ~6 GB | ~15 GB |
+| Training hardware | RTX 3060 (local) | Colab L4 |
+| Training time | ~1h45m | ~8h |
+| Final loss | ~3.9 (L1) | ~0.050 (flow matching) |
+
+Pi0.5 uses PaliGemma as VLM backbone. VLM frozen, only action expert fine-tuned. Gradient checkpointing used to reduce memory from ~37 GB to ~15 GB.
+
+### Pi0.5 Async Inference Setup
+
+Pi0.5 (4B params) is too large to run alongside the robot locally. Uses LeRobot's async inference architecture:
+- **Policy server**: runs on Colab/RunPod GPU, exposes gRPC endpoint
+- **Robot client**: runs on local machine, connects via ngrok TCP tunnel
+- Robot streams camera observations → server returns action chunks → robot executes
+
+Update `RUNPOD_SERVER` in `config.py` with the ngrok address each session.
+
+### Results
+
+ACT stacks reliably across varied cube positions. Pi0.5 v2 struggled to generalize consistently on this task despite lower training loss — loss saturated by 5K steps, additional training unlikely to help.
 
 ---
 
