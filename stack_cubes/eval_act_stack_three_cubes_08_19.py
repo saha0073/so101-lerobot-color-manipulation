@@ -1,8 +1,8 @@
-"""Run ACT pick-place policy on the SO-101 follower arm (two cameras).
+"""Run ACT stack-three-cubes policy on the SO-101 follower arm.
 
 Usage:
-    python eval_act_pick_place_07_16.py
-    python eval_act_pick_place_07_16.py --policy subhodipsaha/act_pick_place_07_16 --episodes 5
+    python eval_act_stack_three_cubes_08_19.py
+    python eval_act_stack_three_cubes_08_19.py --policy subhodipsaha/act_stack_three_cubes_08_19 --episodes 5
 """
 
 import sys
@@ -18,9 +18,9 @@ import pandas  # must import before lerobot to avoid pyarrow DLL conflict
 from config import FOLLOWER_PORT, LEADER_PORT, CAMERA_URL
 
 PHONE_URL = CAMERA_URL
-WRIST_CAM = 2   # /dev/video2 (WowRobo USB camera)
-POLICY_ID = "subhodipsaha/act_pick_place_07_16"
-TASK      = "Pick up the object and place it at the target location"
+WRIST_CAM = 2
+POLICY_ID = "subhodipsaha/act_stack_three_cubes_08_19"
+TASK      = "Stack all three cubes into a tower"
 
 import lerobot.scripts.lerobot_record as _record_module
 
@@ -38,11 +38,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", type=str, default=POLICY_ID)
     parser.add_argument("--episodes", type=int, default=5)
-    parser.add_argument("--episode-time", type=int, default=18)
-    parser.add_argument("--reset-time", type=int, default=10)
+    parser.add_argument("--episode-time", type=int, default=40)
+    parser.add_argument("--reset-time", type=int, default=30)
     args = parser.parse_args(_real_argv)
 
-    from pathlib import Path
     from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
     from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig
     from lerobot.teleoperators.so_leader.config_so_leader import SOLeaderTeleopConfig
@@ -64,7 +63,7 @@ if __name__ == "__main__":
                 ),
                 "wrist": OpenCVCameraConfig(
                     index_or_path=WRIST_CAM,
-                    fps=30,
+                    fps=25,
                     width=640,
                     height=480,
                     fourcc="MJPG",
@@ -73,7 +72,7 @@ if __name__ == "__main__":
         ),
         teleop=SOLeaderTeleopConfig(port=LEADER_PORT),
         dataset=DatasetRecordConfig(
-            repo_id="subhodipsaha/eval_act_pick_place_07_16",
+            repo_id="subhodipsaha/eval_act_stack_three_cubes_08_19",
             single_task=TASK,
             num_episodes=args.episodes,
             episode_time_s=args.episode_time,

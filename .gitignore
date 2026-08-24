@@ -47,6 +47,9 @@ commands.txt
 linkedin_post.txt
 0.22.0
 
+# Logs
+stack_cubes/colab_logs.txt
+
 # Claude Code
 CLAUDE.md
 

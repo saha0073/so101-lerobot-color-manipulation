@@ -1,8 +1,8 @@
-"""Run ACT pick-place policy on the SO-101 follower arm (two cameras).
+"""Run SmolVLA stack-two-cubes policy on the SO-101 follower arm.
 
 Usage:
-    python eval_act_pick_place_07_16.py
-    python eval_act_pick_place_07_16.py --policy subhodipsaha/act_pick_place_07_16 --episodes 5
+    python eval_smolvla_stack_cubes_08_12.py
+    python eval_smolvla_stack_cubes_08_12.py --policy subhodipsaha/smolvla_stack_two_cubes_08_12 --episodes 5
 """
 
 import sys
@@ -18,39 +18,46 @@ import pandas  # must import before lerobot to avoid pyarrow DLL conflict
 from config import FOLLOWER_PORT, LEADER_PORT, CAMERA_URL
 
 PHONE_URL = CAMERA_URL
-WRIST_CAM = 2   # /dev/video2 (WowRobo USB camera)
-POLICY_ID = "subhodipsaha/act_pick_place_07_16"
-TASK      = "Pick up the object and place it at the target location"
-
-import lerobot.scripts.lerobot_record as _record_module
-
-_orig_make_prepost = _record_module.make_pre_post_processors
-def _patched_make_prepost(policy_cfg, pretrained_path=None, **kwargs):
-    overrides = dict(kwargs.get("preprocessor_overrides") or {})
-    overrides["rename_observations_processor"] = {
-        "rename_map": {"observation.state": "observation.environment_state"}
-    }
-    kwargs["preprocessor_overrides"] = overrides
-    return _orig_make_prepost(policy_cfg, pretrained_path, **kwargs)
-_record_module.make_pre_post_processors = _patched_make_prepost
+WRIST_CAM = 2
+POLICY_ID = "subhodipsaha/smolvla_stack_two_cubes_08_12"
+TASK      = "Stack one cube on top of the other cube"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", type=str, default=POLICY_ID)
     parser.add_argument("--episodes", type=int, default=5)
-    parser.add_argument("--episode-time", type=int, default=18)
-    parser.add_argument("--reset-time", type=int, default=10)
+    parser.add_argument("--episode-time", type=int, default=30)
+    parser.add_argument("--reset-time", type=int, default=15)
     args = parser.parse_args(_real_argv)
 
-    from pathlib import Path
+    import torch
+    import time
     from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
     from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig
     from lerobot.teleoperators.so_leader.config_so_leader import SOLeaderTeleopConfig
     from lerobot.scripts.lerobot_record import record, RecordConfig, DatasetRecordConfig
     from lerobot.configs import PreTrainedConfig
+    from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
+    from lerobot.utils.constants import ACTION
+
+    _orig_select_action = SmolVLAPolicy.select_action
+    _call_count = [0]
+    def _timed_select_action(self, batch):
+        t = time.perf_counter()
+        ctx = torch.autocast("cuda", dtype=torch.bfloat16) if torch.cuda.is_available() else torch.no_grad()
+        with ctx:
+            result = _orig_select_action(self, batch)
+        elapsed_ms = (time.perf_counter() - t) * 1000
+        _call_count[0] += 1
+        queue_len = len(self._queues.get(ACTION, []))
+        print(f"[select_action #{_call_count[0]}] {elapsed_ms:.1f}ms  queue_remaining={queue_len}")
+        return result
+    SmolVLAPolicy.select_action = _timed_select_action
 
     policy = PreTrainedConfig.from_pretrained(args.policy)
     policy.pretrained_path = args.policy
+    policy.num_steps = 20
+    policy.n_action_steps = 50
 
     cfg = RecordConfig(
         robot=SOFollowerRobotConfig(
@@ -64,7 +71,7 @@ if __name__ == "__main__":
                 ),
                 "wrist": OpenCVCameraConfig(
                     index_or_path=WRIST_CAM,
-                    fps=30,
+                    fps=25,
                     width=640,
                     height=480,
                     fourcc="MJPG",
@@ -73,7 +80,7 @@ if __name__ == "__main__":
         ),
         teleop=SOLeaderTeleopConfig(port=LEADER_PORT),
         dataset=DatasetRecordConfig(
-            repo_id="subhodipsaha/eval_act_pick_place_07_16",
+            repo_id="subhodipsaha/eval_smolvla_stack_two_cubes_08_12",
             single_task=TASK,
             num_episodes=args.episodes,
             episode_time_s=args.episode_time,

@@ -7,14 +7,17 @@ Usage:
 
 import sys
 import argparse
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _real_argv = sys.argv[1:]
 sys.argv = ["lerobot-record"]
 
 import pandas  # must import before lerobot to avoid pyarrow DLL conflict
-from config import FOLLOWER_PORT, LEADER_PORT
+from config import FOLLOWER_PORT, LEADER_PORT, CAMERA_URL
 
-PHONE_URL = "http://192.168.0.3:8080/video"
+PHONE_URL = CAMERA_URL
 WRIST_CAM = 2   # /dev/video2 (WowRobo USB camera)
 POLICY_ID = "subhodipsaha/smolvla_pick_place_07_16"
 TASK      = "Pick up the object and place it at the target location"
@@ -41,7 +44,8 @@ if __name__ == "__main__":
     _call_count = [0]
     def _timed_select_action(self, batch):
         t = time.perf_counter()
-        with torch.autocast("cuda", dtype=torch.bfloat16):
+        ctx = torch.autocast("cuda", dtype=torch.bfloat16) if torch.cuda.is_available() else torch.no_grad()
+        with ctx:
             result = _orig_select_action(self, batch)
         elapsed_ms = (time.perf_counter() - t) * 1000
         _call_count[0] += 1
@@ -52,7 +56,8 @@ if __name__ == "__main__":
 
     policy = PreTrainedConfig.from_pretrained(args.policy)
     policy.pretrained_path = args.policy
-    policy.num_steps = 10
+    policy.num_steps = 20
+    policy.n_action_steps = 50
 
     cfg = RecordConfig(
         robot=SOFollowerRobotConfig(
@@ -66,7 +71,7 @@ if __name__ == "__main__":
                 ),
                 "wrist": OpenCVCameraConfig(
                     index_or_path=WRIST_CAM,
-                    fps=25,
+                    fps=30,
                     width=640,
                     height=480,
                     fourcc="MJPG",
