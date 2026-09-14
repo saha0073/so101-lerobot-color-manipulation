@@ -28,6 +28,7 @@ Pick up an object and place it at a target location. Object placed at a differen
 |-------|--------|-------------|
 | ACT | ACT (deterministic) | [act_pick_place_07_16](https://huggingface.co/subhodipsaha/act_pick_place_07_16) |
 | SmolVLA | SmolVLA (flow matching) | [smolvla_pick_place_07_16](https://huggingface.co/subhodipsaha/smolvla_pick_place_07_16) |
+| MolmoAct2 | MolmoAct2 (action expert fine-tune) | [molmoact2_pick_place](https://huggingface.co/subhodipsaha/molmoact2_pick_place) |
 
 ### Scripts
 
@@ -35,33 +36,58 @@ Pick up an object and place it at a target location. Object placed at a differen
 # Record episodes (leader arm teleoperation)
 python pick_place/record_pick_place_07_16.py
 
-# Train
+# Train (local)
 python pick_place/train_act_pick_place_07_16.py       # ~1h44m on RTX 3060
 python pick_place/train_smolvla_pick_place_07_16.py   # ~2h on RTX 3060
 
-# Inference
+# Fine-tune MolmoAct2 (Colab L4)
+# open pick_place/molmoact_finetune_colab.ipynb
+
+# Inference (ACT / SmolVLA — local)
 python pick_place/eval_act_pick_place_07_16.py
 python pick_place/eval_smolvla_pick_place_07_16.py
+
+# Inference (MolmoAct2 — requires policy server on Colab L4)
+# 1. Run pick_place/molmoact_finetuned_inference_colab.ipynb on Colab L4
+# 2. Paste the ngrok URL into config.py as MOLMOACT2_SERVER
+python pick_place/eval_molmoact2_pick_place.py
 ```
 
 ### Training Details
 
-| | ACT | SmolVLA |
-|--|-----|---------|
-| Dataset | 40 episodes | 40 episodes |
-| Cameras | phone + wrist | phone + wrist |
-| Steps | 20,000 | 20,000 |
-| Batch size | 8 | 4 |
-| Mixed precision | BF16 | BF16 |
-| Final loss | ~5.0 | ~0.047 |
-| Training time | ~1h44m (RTX 3060) | ~2h (RTX 3060) |
+| | ACT | SmolVLA | MolmoAct2 |
+|--|-----|---------|-----------|
+| Dataset | 40 episodes | 40 episodes | 40 episodes |
+| Cameras | phone + wrist | phone + wrist | phone + wrist |
+| Steps | 20,000 | 20,000 | 2,500 |
+| Batch size | 8 | 4 | 16 |
+| Mixed precision | BF16 | BF16 | BF16 |
+| Trainable params | ~90M | ~450M | ~1B / 7B (action expert, VLM frozen) |
+| Training hardware | RTX 3060 (local) | RTX 3060 (local) | Colab L4 |
+| Final loss | ~5.0 | ~0.047 | ~0.055 (flow matching) |
+| Training time | ~1h44m | ~2h | ~2h |
+
+### MolmoAct2 Async Inference Setup
+
+MolmoAct2 (7B params) is too large to run locally alongside the robot. Uses a FastAPI server on Colab L4 with ngrok HTTP tunnel:
+
+- **Policy server**: `pick_place/molmoact_finetuned_inference_colab.ipynb` — loads the fine-tuned model, injects QUANTILE normalization stats, serves `/predict` returning 30-step action chunks
+- **Robot client**: `pick_place/eval_molmoact2_pick_place.py` — sends phone + wrist images and joint state, executes returned action chunks at 25 Hz
+
+Update `MOLMOACT2_SERVER` in `config.py` with the ngrok URL each session.
+
+**Key implementation details:**
+- Base model processor loaded from `allenai/MolmoAct2-SO100_101` (fine-tuned repo has no processor files)
+- QUANTILE normalization stats from the pick-place dataset are injected at inference time as a custom `norm_tag`
+- Server returns 30-step chunks at ~1.1s latency; client uses look-ahead state (last queued action) for the next chunk request to improve trajectory continuity
 
 ### Results
 
 ACT: smooth, stable, picks consistently from varied positions.
 SmolVLA: works but shows more jitter in the trajectory.
+MolmoAct2: follows the correct motion trajectory; chunk-boundary retraction present due to 1.1s server latency.
 
-Same pattern as Task 1 — ACT more reliable on precision tasks with small datasets.
+Same pattern as Task 1 — ACT more reliable on precision tasks with small datasets. MolmoAct2 shows promise as a general-purpose VLA but async inference latency limits trajectory continuity.
 
 ---
 
