@@ -1,0 +1,17 @@
+MolmoAct2 Inference Latency — Stack Three Cubes
+Model: subhodipsaha/molmoact2_stack_three_cubes (v1, 39 episodes)
+Setup: Colab GPU → ngrok → laptop client at 25Hz
+
+GPU     | Avg latency | Range
+--------|-------------|----------
+L4      | ~1085ms     | 1064–1155ms
+A100    | ~990ms      | 978–1009ms
+
+Improvement: ~90ms (~8%) — negligible in practice.
+
+Conclusion: Bottleneck is NOT GPU memory bandwidth or FLOPS.
+It is the flow matching denoising loop (sequential steps, hard to parallelize)
++ Molmo vision encoder tokenization. Both scale poorly with raw GPU upgrade.
+
+The async chunk prefetch buffer (REFILL_THRESHOLD=28 steps) is the correct
+architecture to absorb this latency — not a faster GPU.

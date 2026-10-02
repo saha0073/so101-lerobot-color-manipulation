@@ -44,13 +44,13 @@ if __name__ == "__main__":
         dataset=DatasetRecordConfig(
             repo_id="subhodipsaha/so101_stack_three_cubes_08_19",
             single_task="Stack all three cubes into a tower",
-            num_episodes=40,
-            episode_time_s=30,
+            num_episodes=15,
+            episode_time_s=15,
             reset_time_s=12,
             fps=25,
             root=str(Path.home() / ".cache/huggingface/lerobot/subhodipsaha/so101_stack_three_cubes_08_19"),
         ),
-        resume=False,
+        resume=True,
         display_data=False,
     )
     record(cfg)

@@ -15,6 +15,7 @@ import threading
 from pathlib import Path
 from queue import Queue, Empty
 
+import cv2
 import numpy as np
 import requests
 from PIL import Image
@@ -137,7 +138,7 @@ def check_server() -> bool:
         return False
 
 
-def run_episode(robot: SOFollower, task: str, episode_time: float):
+def run_episode(robot: SOFollower, task: str, episode_time: float, show_wrist: bool = False, record_path: "Path | None" = None):
     action_queue: Queue = Queue()
     refilling = threading.Event()
     last_queued = [None]  # last action put in queue = predicted end-of-chunk position
@@ -172,25 +173,60 @@ def run_episode(robot: SOFollower, task: str, episode_time: float):
     dt = 1.0 / CONTROL_HZ
     t_end = time.time() + episode_time
 
-    while time.time() < t_end:
-        t_step = time.time()
+    writer_wrist = None
+    writer_phone = None
+    if record_path is not None:
+        record_path.parent.mkdir(parents=True, exist_ok=True)
+        writer_wrist = cv2.VideoWriter(
+            str(record_path),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            CONTROL_HZ,
+            (640, 480),
+        )
+        phone_path = record_path.with_name(record_path.stem + "_phone.mp4")
+        writer_phone = cv2.VideoWriter(
+            str(phone_path),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            CONTROL_HZ,
+            (480, 640),
+        )
+        print(f"  Recording wrist → {record_path}")
+        print(f"  Recording phone → {phone_path}")
 
-        obs = robot.get_observation()
-        images_b64, state = obs_to_server_inputs(obs)
-        maybe_refill(images_b64, state)
+    try:
+        while time.time() < t_end:
+            t_step = time.time()
 
-        try:
-            action_row = action_queue.get(timeout=2.0)
-        except Empty:
-            print("  [warn] queue empty — holding position")
-            time.sleep(dt)
-            continue
+            obs = robot.get_observation()
+            images_b64, state = obs_to_server_inputs(obs)
+            if "wrist" in obs:
+                frame_bgr = obs["wrist"][..., ::-1]  # RGB → BGR
+                if show_wrist:
+                    cv2.imshow("Wrist Camera", frame_bgr)
+                    cv2.waitKey(1)
+                if writer_wrist is not None:
+                    writer_wrist.write(frame_bgr)
+            if "phone" in obs and writer_phone is not None:
+                writer_phone.write(obs["phone"][..., ::-1])  # RGB → BGR
+            maybe_refill(images_b64, state)
 
-        robot.send_action(actions_to_robot(action_row))
+            try:
+                action_row = action_queue.get(timeout=2.0)
+            except Empty:
+                print("  [warn] queue empty — holding position")
+                time.sleep(dt)
+                continue
 
-        elapsed = time.time() - t_step
-        if dt - elapsed > 0:
-            time.sleep(dt - elapsed)
+            robot.send_action(actions_to_robot(action_row))
+
+            elapsed = time.time() - t_step
+            if dt - elapsed > 0:
+                time.sleep(dt - elapsed)
+    finally:
+        if writer_wrist is not None:
+            writer_wrist.release()
+        if writer_phone is not None:
+            writer_phone.release()
 
 
 def main():
@@ -199,6 +235,8 @@ def main():
     parser.add_argument("--episodes", type=int, default=NUM_EPISODES)
     parser.add_argument("--episode-time", type=int, default=EPISODE_TIME)
     parser.add_argument("--reset-time", type=int, default=RESET_TIME)
+    parser.add_argument("--show-wrist", action="store_true", help="Display wrist camera feed in a window")
+    parser.add_argument("--record", action="store_true", help="Save wrist camera feed as MP4 per episode to recordings/")
     args = parser.parse_args()
 
     print(f"Task:   {args.task}")
@@ -228,8 +266,14 @@ def main():
     try:
         for ep in range(args.episodes):
             print(f"=== Episode {ep + 1}/{args.episodes} — {args.episode_time}s ===")
-            go_home(robot)
-            run_episode(robot, args.task, args.episode_time)
+            record_path = None
+            if args.record:
+                from datetime import datetime
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                record_path = Path("recordings") / f"molmoact2_ep{ep + 1}_{ts}.mp4"
+            run_episode(robot, args.task, args.episode_time, show_wrist=args.show_wrist, record_path=record_path)
+            if record_path:
+                print(f"  Saved → {record_path} + {record_path.stem}_phone.mp4")
             print(f"Episode {ep + 1} done.")
 
             if ep < args.episodes - 1:
@@ -244,6 +288,8 @@ def main():
     finally:
         robot.disconnect()
         print("Robot disconnected.")
+        if args.show_wrist or args.record:
+            cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

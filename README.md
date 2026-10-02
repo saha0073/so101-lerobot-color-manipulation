@@ -1,6 +1,6 @@
-# SO-101 Manipulation with ACT, SmolVLA, and Pi0.5
+# SO-101 Manipulation with ACT, SmolVLA, Pi0.5 and MolmoAct2
 
-Imitation learning experiments on an SO-101 robot arm using ACT, SmolVLA, and Pi0.5 policies. Three tasks:
+Imitation learning experiments on an SO-101 robot arm using ACT, SmolVLA, Pi0.5 and MolmoAct2 policies. Three tasks:
 
 1. **Color-conditioned cup push** — arm moves toward a specific colored cup (blue or red) from varying positions
 2. **Pick and place** — arm picks up an object and places it at a target location, object at a different position every episode
@@ -93,15 +93,15 @@ Same pattern as Task 1 — ACT more reliable on precision tasks with small datas
 
 ## Task 3: Stack Three Cubes
 
-Pick up three cubes one by one and stack them into a tower. Cubes placed at slightly different positions each episode. Significantly harder than pick-and-place — requires three sequential grasps, precise placement each time, and recovering if any cube is slightly off.
+Pick up three cubes one by one and stack them into a tower. Significantly harder than pick-and-place — requires three sequential grasps and recovering if any cube slips.
 
-Trained ACT locally and also fine-tuned Pi0.5 (4B VLA) on the same dataset using cloud GPU, with async inference over ngrok TCP tunnel.
+Trained ACT locally. Fine-tuned Pi0.5 (4B) and MolmoAct2 (7B) on Colab with async inference. MolmoAct2 v2 uses a 119-episode dataset with deliberate recovery scenarios (60 recovery episodes) and outperforms Pi0.5.
 
 ### Datasets
 
 | Dataset | Episodes | HuggingFace |
 |---------|----------|-------------|
-| Stack three cubes | 40 | [so101_stack_three_cubes_08_19](https://huggingface.co/datasets/subhodipsaha/so101_stack_three_cubes_08_19) |
+| Stack three cubes v2 (with recovery) | 119 | [so101_stack_three_cubes_08_19](https://huggingface.co/datasets/subhodipsaha/so101_stack_three_cubes_08_19) |
 
 ### Models
 
@@ -109,6 +109,8 @@ Trained ACT locally and also fine-tuned Pi0.5 (4B VLA) on the same dataset using
 |-------|--------|-------------|
 | ACT | ACT | [act_stack_three_cubes_08_19](https://huggingface.co/subhodipsaha/act_stack_three_cubes_08_19) |
 | Pi0.5 v2 | Pi0.5 (action expert only) | [pi05_stack_three_cubes_08_19_v2](https://huggingface.co/subhodipsaha/pi05_stack_three_cubes_08_19_v2) |
+| MolmoAct2 v1 | MolmoAct2 (39 eps, no recovery) | [molmoact2_stack_three_cubes](https://huggingface.co/subhodipsaha/molmoact2_stack_three_cubes) |
+| MolmoAct2 v2 | MolmoAct2 (119 eps, recovery data) | [molmoact2_stack_three_cubes](https://huggingface.co/subhodipsaha/molmoact2_stack_three_cubes) |
 
 ### Scripts
 
@@ -120,27 +122,35 @@ python stack_cubes/record_stack_three_cubes_08_19.py
 python stack_cubes/train_act_stack_three_cubes_08_19.py        # ~1h45m on RTX 3060
 python stack_cubes/train_pi05_runpod_stack_three_cubes_08_19.py  # ~8h on Colab L4
 
+# Fine-tune MolmoAct2 (Colab L4)
+# open stack_cubes/molmoact_stack_cubes_finetune_colab.ipynb
+
 # Inference (ACT — local)
 python stack_cubes/eval_act_stack_three_cubes_08_19.py
 
 # Inference (Pi0.5 — async, requires policy server running on Colab/RunPod)
 python stack_cubes/eval_pi05_runpod_stack_three_cubes_08_19.py
+
+# Inference (MolmoAct2 — requires policy server on Colab L4)
+# 1. Run stack_cubes/molmoact_stack_cubes_inference_colab.ipynb on Colab L4
+# 2. Paste the ngrok URL into config.py as MOLMOACT2_STACK_SERVER
+python stack_cubes/eval_molmoact2_stack_three_cubes.py
+python stack_cubes/eval_molmoact2_stack_three_cubes.py --record   # saves phone + wrist MP4 per episode
 ```
 
 ### Training Details
 
-| | ACT | Pi0.5 |
-|--|-----|-------|
-| Dataset | 40 episodes | 40 episodes |
-| Cameras | phone + wrist | phone + wrist |
-| Steps | 20,000 | 5,000 |
-| Batch size | 8 | 16 |
-| Mixed precision | BF16 | BF16 |
-| Trainable params | ~90M | 693M / 4B (action expert, VLM frozen) |
-| Peak GPU memory | ~6 GB | ~15 GB |
-| Training hardware | RTX 3060 (local) | Colab L4 |
-| Training time | ~1h45m | ~8h |
-| Final loss | ~3.9 (L1) | ~0.050 (flow matching) |
+| | ACT | Pi0.5 | MolmoAct2 v1 | MolmoAct2 v2 |
+|--|-----|-------|--------------|--------------|
+| Dataset | 40 eps | 40 eps | 39 eps | 119 eps (60 recovery) |
+| Cameras | phone + wrist | phone + wrist | phone + wrist | phone + wrist |
+| Steps | 20,000 | 5,000 | 2,500 | 5,000 |
+| Batch size | 8 | 16 | 16 | 16 |
+| Mixed precision | BF16 | BF16 | BF16 | BF16 |
+| Trainable params | ~90M | 693M / 4B | ~1B / 7B | ~1B / 7B |
+| Training hardware | RTX 3060 | Colab L4 | Colab L4 | Colab L4 |
+| Training time | ~1h45m | ~8h | ~6h | ~12h |
+| Final loss | ~3.9 (L1) | ~0.050 (flow matching) | ~0.019 (flow matching) | ~0.021 (flow matching) |
 
 Pi0.5 uses PaliGemma as VLM backbone. VLM frozen, only action expert fine-tuned. Gradient checkpointing used to reduce memory from ~37 GB to ~15 GB.
 
@@ -155,7 +165,11 @@ Update `RUNPOD_SERVER` in `config.py` with the ngrok address each session.
 
 ### Results
 
-ACT stacks reliably across varied cube positions. Pi0.5 v2 struggled to generalize consistently on this task despite lower training loss — loss saturated by 5K steps, additional training unlikely to help.
+ACT stacks reliably across varied cube positions.
+
+Pi0.5 v2 struggled to generalize consistently despite lower training loss — loss saturated by 5K steps.
+
+MolmoAct2 v2 outperforms Pi0.5 on this task. Starting from `allenai/MolmoAct2-SO100_101` (pretrained on SO-101 data) gives a head start over Pi0.5's general pretraining. Recovery data (60/119 episodes starting from mid-task positions) enables the model to correct mid-task failures. MolmoAct2 v1 (39 eps, no recovery data) does not recover; v2 does.
 
 ---
 
@@ -317,3 +331,5 @@ ACT is deterministic at inference — the CVAE encoder is discarded and the late
 - [LeRobot](https://github.com/huggingface/lerobot) by Hugging Face
 - [ACT](https://arxiv.org/abs/2304.13705) — Action Chunking with Transformers
 - [SmolVLA](https://huggingface.co/blog/smolvla) — Small Vision-Language-Action model
+- [MolmoAct2](https://huggingface.co/allenai/MolmoAct2-SO100_101) — 7B VLA by Allen AI, pretrained on SO-100/101
+- [Pi0.5](https://www.physicalintelligence.company/blog/pi05) — 4B VLA by Physical Intelligence
